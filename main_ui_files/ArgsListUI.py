@@ -1,5 +1,6 @@
 from PySide6.QtCore import Signal
 from PySide6 import QtWidgets, QtCore
+from main_ui_files.AnimaUI import AnimaWidget
 from main_ui_files.FluxUI import FluxWidget
 from main_ui_files.BucketUI import BucketWidget
 from main_ui_files.GeneralUI import GeneralWidget
@@ -25,10 +26,14 @@ class ArgsWidget(QtWidgets.QWidget):
         self.scroll_area = QtWidgets.QScrollArea()
         self.scroll_widget = QtWidgets.QWidget()
         self.args_widget_array: list[BaseWidget] = []
+        self._loading_args = False
+        self.general_widget = None
+        self.bucket_widget = None
         self.network_widget = NetworkWidget()
         self.optimizer_widget = OptimizerWidget()
         self.ti_widget = TextualInversionWidget()
         self.ti_widget.setVisible(False)
+        self.anima_widget = AnimaWidget()
         self.flux_widget = FluxWidget()
 
         self.setup_widget()
@@ -47,6 +52,7 @@ class ArgsWidget(QtWidgets.QWidget):
 
     def setup_args_widgets(self) -> None:
         general_args = GeneralWidget()
+        self.general_widget = general_args
         general_args.colap.toggle_collapsed()
         general_args.colap.title_frame.setChecked(True)
         general_args.sdxlChecked.connect(lambda x: self.sdxlChecked.emit(x))
@@ -57,10 +63,21 @@ class ArgsWidget(QtWidgets.QWidget):
                 x or general_args.widget.sdxl_enable.isChecked()
             )
         )
+        general_args.v2Checked.connect(
+            lambda x: self.anima_widget.external_enable_disable(
+                x or general_args.widget.sdxl_enable.isChecked()
+            )
+        )
         general_args.sdxlChecked.connect(
             lambda x: self.flux_widget.external_enable_disable(x or general_args.widget.v2_enable.isChecked())
         )
+        general_args.sdxlChecked.connect(
+            lambda x: self.anima_widget.external_enable_disable(x or general_args.widget.v2_enable.isChecked())
+        )
         self.flux_widget.Toggled.connect(general_args.enable_disable_model_type)
+        self.anima_widget.Toggled.connect(general_args.enable_disable_model_type)
+        self.flux_widget.Toggled.connect(self.anima_widget.external_enable_disable)
+        self.anima_widget.Toggled.connect(self.flux_widget.external_enable_disable)
         self.flux_widget.SplitMode.connect(
             lambda x: self.network_widget.edit_network_args("train_blocks", "single" if x else False, True)
         )
@@ -68,6 +85,8 @@ class ArgsWidget(QtWidgets.QWidget):
             lambda x: self.network_widget.edit_network_args("split_qkv", x, True)
         )
         self.flux_widget.Toggled.connect(self.network_widget.toggle_sdxl)
+        self.anima_widget.Toggled.connect(self.network_widget.toggle_sdxl)
+        self.anima_widget.Toggled.connect(self.apply_anima_defaults)
         self.optimizer_widget.maskedLossChecked.connect(lambda x: self.maskedLossChecked.emit(x))
         self.args_widget_array.append(general_args)
         self.sdxlChecked.connect(self.network_widget.toggle_sdxl)
@@ -75,10 +94,12 @@ class ArgsWidget(QtWidgets.QWidget):
         self.args_widget_array.append(self.ti_widget)
         self.args_widget_array.append(self.optimizer_widget)
         self.args_widget_array.append(SavingWidget())
-        self.args_widget_array.append(BucketWidget())
+        self.bucket_widget = BucketWidget()
+        self.args_widget_array.append(self.bucket_widget)
         self.args_widget_array.append(NoiseOffsetWidget())
         self.args_widget_array.append(SampleWidget())
         self.args_widget_array.append(LoggingWidget())
+        self.args_widget_array.append(self.anima_widget)
         self.args_widget_array.append(self.flux_widget)
         self.args_widget_array.append(ExtraArgsWidget())
 
@@ -108,6 +129,42 @@ class ArgsWidget(QtWidgets.QWidget):
         return {"args": args, "dataset": dataset_args}
 
     def load_args(self, args: dict, dataset_args: dict) -> None:
+        self._loading_args = True
         for widget in self.args_widget_array:
             widget.load_args(args)
             widget.load_dataset_args(dataset_args)
+        self._loading_args = False
+
+    def apply_anima_defaults(self, checked: bool) -> None:
+        # Apply only for a fresh toggle-on; never override loaded TOML presets.
+        if not checked or self._loading_args:
+            return
+        if self.anima_widget.qwen3_input.text().strip():
+            return
+        if not self.general_widget or not self.bucket_widget:
+            return
+
+        # General defaults: 1024 square, bf16, checkpointing + latent cache.
+        self.general_widget.widget.width_input.setValue(1024)
+        self.general_widget.widget.height_enable.setChecked(False)
+        self.general_widget.widget.mixed_precision_selector.setCurrentText("bf16")
+        self.general_widget.widget.grad_checkpointing_enable.setChecked(True)
+        self.general_widget.widget.cache_latents_enable.setChecked(True)
+
+        # Anima LoRA defaults from common usage: DiT only + TE output cache.
+        self.network_widget.widget.network_dim_input.setValue(16)
+        self.network_widget.widget.network_alpha_input.setValue(16.0)
+        self.network_widget.widget.unet_te_both_select.setCurrentIndex(1)
+        self.network_widget.widget.cache_te_outputs_enable.setChecked(True)
+
+        # Conservative optimizer defaults for base-model finetuning behavior.
+        self.optimizer_widget.widget.optimizer_type_selector.setCurrentText("AdamW")
+        self.optimizer_widget.widget.lr_scheduler_selector.setCurrentText("constant")
+        self.optimizer_widget.widget.main_lr_input.setText("2e-5")
+
+        # Bucket defaults commonly used for Anima-size datasets.
+        self.bucket_widget.widget.bucket_group.setChecked(True)
+        self.bucket_widget.widget.bucket_no_upscale.setChecked(True)
+        self.bucket_widget.widget.min_input.setValue(512)
+        self.bucket_widget.widget.max_input.setValue(2048)
+        self.bucket_widget.widget.steps_input.setValue(64)
