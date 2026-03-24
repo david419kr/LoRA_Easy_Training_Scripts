@@ -1,3 +1,5 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-python3.12 install.py
+cd "$(dirname "$0")"
+python3.12 install.py "$@"
