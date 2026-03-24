@@ -20,6 +20,9 @@ class SavingWidget(BaseWidget):
 
         self.setup_widget()
         self.setup_connections()
+        # Keep Saving Args expanded by default for better first-run discoverability.
+        self.colap.toggle_collapsed()
+        self.colap.title_frame.setChecked(True)
 
     def setup_widget(self) -> None:
         super().setup_widget()
