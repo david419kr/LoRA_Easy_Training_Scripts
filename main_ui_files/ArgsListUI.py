@@ -29,6 +29,7 @@ class ArgsWidget(QtWidgets.QWidget):
         self._loading_args = False
         self.general_widget = None
         self.bucket_widget = None
+        self.logging_widget = None
         self.network_widget = NetworkWidget()
         self.optimizer_widget = OptimizerWidget()
         self.ti_widget = TextualInversionWidget()
@@ -98,7 +99,8 @@ class ArgsWidget(QtWidgets.QWidget):
         self.args_widget_array.append(self.bucket_widget)
         self.args_widget_array.append(NoiseOffsetWidget())
         self.args_widget_array.append(SampleWidget())
-        self.args_widget_array.append(LoggingWidget())
+        self.logging_widget = LoggingWidget()
+        self.args_widget_array.append(self.logging_widget)
         self.args_widget_array.append(self.anima_widget)
         self.args_widget_array.append(self.flux_widget)
         self.args_widget_array.append(ExtraArgsWidget())

@@ -15,6 +15,7 @@ class LoggingWidget(BaseWidget):
         super().__init__(parent)
         self.colap.set_title("Logging Args")
         self.widget = Ui_logging_ui()
+        self.default_logging_dir = Path("logs").resolve()
 
         self.name = "logging_args"
 
@@ -30,6 +31,9 @@ class LoggingWidget(BaseWidget):
         self.widget.log_prefix_input.setEnabled(False)
         self.widget.log_tracker_name_input.setEnabled(False)
         self.widget.log_output_selector.setIcon(QIcon(str(Path("icons/folder.svg"))))
+        self.default_logging_dir.mkdir(parents=True, exist_ok=True)
+        self.widget.log_output_input.setText(self.default_logging_dir.as_posix())
+        self.widget.logging_group.setChecked(True)
 
     def setup_connections(self) -> None:
         self.widget.logging_group.clicked.connect(self.enable_disable)
@@ -52,6 +56,7 @@ class LoggingWidget(BaseWidget):
             lambda x: self.edit_args("log_tracker_name", x, True)
         )
         self.widget.log_wandb_key_input.textChanged.connect(lambda x: self.edit_args("wandb_api_key", x))
+        self.enable_disable(True)
 
     def check_validity(self, elem: DragDropLineEdit) -> None:
         elem.dirty = True
@@ -92,11 +97,12 @@ class LoggingWidget(BaseWidget):
 
     def load_args(self, args: dict) -> bool:
         args: dict = args.get(self.name, {})
+        default_logging_dir = self.default_logging_dir.as_posix()
 
         # update element inputs
-        self.widget.logging_group.setChecked(bool(args.get("log_with", False)))
+        self.widget.logging_group.setChecked(bool(args.get("log_with", True)))
         self.widget.log_mode_selector.setCurrentText(args.get("log_with", "tensorboard").capitalize())
-        self.widget.log_output_input.setText(args.get("logging_dir", ""))
+        self.widget.log_output_input.setText(args.get("logging_dir", default_logging_dir))
         self.widget.log_prefix_enable.setChecked("log_prefix" in args)
         self.widget.log_prefix_input.setText(args.get("log_prefix", ""))
         self.widget.log_tracker_name_enable.setChecked("log_tracker_name" in args)
@@ -104,5 +110,5 @@ class LoggingWidget(BaseWidget):
         self.widget.log_wandb_key_input.setText(args.get("wandb_api_key", ""))
 
         # edit args to match
-        self.enable_disable(bool(args.get("log_with", False)))
+        self.enable_disable(bool(args.get("log_with", True)))
         return True

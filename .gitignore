@@ -7,3 +7,4 @@ LoraEasyCustomOptimizer.egg-info
 build
 auto_save_store
 output
+logs

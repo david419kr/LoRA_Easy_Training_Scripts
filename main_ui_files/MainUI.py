@@ -2,6 +2,9 @@ import contextlib
 import json
 import os
 import shutil
+import subprocess
+import sys
+import webbrowser
 from pathlib import Path
 from threading import Thread
 from time import sleep
@@ -28,9 +31,11 @@ class MainWidget(QWidget):
         self.subset_widget = SubsetListWidget()
         self.queue_widget = QueueWidget()
         self.begin_training_button = QPushButton("Start Training")
+        self.start_tensorboard_button = QPushButton("Start TensorBoard")
         self.backend_url_input = LineEditWithHighlight()
         self.tab_widget = ScrollOnSelect.TabView()
         self.train_mode = TrainingModes.LORA
+        self.tensorboard_process = None
 
         self.setup_widget()
         self.setup_connections()
@@ -50,6 +55,7 @@ class MainWidget(QWidget):
         self.main_layout.addWidget(self.queue_widget, 0, 1, 2, 1)
         self.main_layout.addWidget(self.backend_url_input, 2, 1, 1, 1)
         self.main_layout.addWidget(self.begin_training_button, 3, 1, 1, 1)
+        self.main_layout.addWidget(self.start_tensorboard_button, 4, 1, 1, 1)
         self.queue_widget.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Minimum
         )
@@ -57,6 +63,9 @@ class MainWidget(QWidget):
             QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Maximum
         )
         self.begin_training_button.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Maximum
+        )
+        self.start_tensorboard_button.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Maximum
         )
 
@@ -67,7 +76,68 @@ class MainWidget(QWidget):
         self.queue_widget.saveQueue.connect(lambda x: self.save_toml(Path(x)))
         self.queue_widget.loadQueue.connect(lambda x: self.load_toml(Path(x)))
         self.begin_training_button.clicked.connect(self.start_training)
+        self.start_tensorboard_button.clicked.connect(self.start_tensorboard)
         self.backend_url_input.editingFinished.connect(self.update_url)
+
+    def get_tensorboard_python(self) -> Path:
+        if sys.platform == "linux":
+            python = Path("backend/sd_scripts/venv/bin/python")
+        else:
+            python = Path("backend/sd_scripts/venv/Scripts/python.exe")
+        return python if python.exists() else Path(sys.executable)
+
+    def get_logging_dir(self) -> Path:
+        log_dir_text = ""
+        if self.args_widget.logging_widget is not None:
+            log_dir_text = self.args_widget.logging_widget.widget.log_output_input.text().strip()
+        log_dir = Path(log_dir_text) if log_dir_text else Path("logs")
+        if not log_dir.is_absolute():
+            log_dir = Path.cwd() / log_dir
+        log_dir.mkdir(parents=True, exist_ok=True)
+        return log_dir.resolve()
+
+    def start_tensorboard(self) -> None:
+        url = "http://127.0.0.1:6006"
+        if self.tensorboard_process and self.tensorboard_process.poll() is None:
+            webbrowser.open(url)
+            return
+
+        log_dir = self.get_logging_dir()
+        python = self.get_tensorboard_python()
+        command = [
+            str(python),
+            "-m",
+            "tensorboard.main",
+            "--logdir",
+            str(log_dir),
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "6006",
+        ]
+
+        try:
+            self.tensorboard_process = subprocess.Popen(
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            sleep(1.0)
+            if self.tensorboard_process.poll() is not None:
+                self.tensorboard_process = None
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "TensorBoard",
+                    "TensorBoard 실행에 실패했습니다. (포트 6006 충돌 가능성)",
+                )
+                return
+            webbrowser.open(url)
+        except Exception as e:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "TensorBoard",
+                f"TensorBoard 실행 중 오류가 발생했습니다:\n{e}",
+            )
 
     def update_url(self) -> None:
         url = self.backend_url_input.text()
