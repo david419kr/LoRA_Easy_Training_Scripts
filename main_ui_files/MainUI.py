@@ -216,6 +216,15 @@ class MainWidget(QWidget):
 
         return args
 
+    def apply_resume_step_mode(self, args: dict, train_mode: TrainingModes) -> dict:
+        if train_mode != TrainingModes.LORA:
+            return args
+        saving_args = args.get("saving_args", {})
+        general_args = args.get("general_args", {})
+        if saving_args.get("resume") and general_args.get("max_train_steps") is not None:
+            saving_args["resume_step_mode"] = "additional"
+        return args
+
     def process_toml(self, file_name: Path | None = None) -> tuple[dict, dict]:
         loaded_args = TomlFunctions.load_toml(file_name)
         if not loaded_args:
@@ -267,7 +276,9 @@ class MainWidget(QWidget):
 
     def train_helper(self, url: str, train_toml: Path) -> bool:
         args, dataset_args, train_mode = self.process_toml(train_toml)
-        final_args = {"args": self.perform_name_replace(args), "dataset": dataset_args}
+        processed_args = self.perform_name_replace(args)
+        processed_args = self.apply_resume_step_mode(processed_args, train_mode)
+        final_args = {"args": processed_args, "dataset": dataset_args}
         config = json.loads(Path("config.json").read_text())
         try:
             response = requests.post(f"{url}/validate", json=True, data=json.dumps(final_args))

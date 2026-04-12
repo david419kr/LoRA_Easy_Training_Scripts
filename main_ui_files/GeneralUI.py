@@ -42,6 +42,13 @@ class GeneralWidget(BaseWidget):
     def setup_widget(self) -> None:
         super().setup_widget()
         self.widget.setupUi(self.content)
+        resume_steps_tooltip = (
+            "<html><head/><body><p>"
+            "Max Training Time can be in epochs or in steps. The step calculation for epochs will match perfectly "
+            "with how sd-scripts calculates their steps if used. When Resume State is enabled and Steps mode is "
+            "selected, this value is treated as additional training steps to run after the saved state."
+            "</p></body></html>"
+        )
 
         def setup_file(elem: DragDropLineEdit, selector: QPushButton):
             selector_icon = QIcon(str(Path("icons/folder.svg")))
@@ -52,6 +59,9 @@ class GeneralWidget(BaseWidget):
         setup_file(self.widget.base_model_input, self.widget.base_model_selector)
         setup_file(self.widget.vae_input, self.widget.vae_selector)
         self.widget.vae_input.allow_empty = True
+        self.widget.label_6.setToolTip(resume_steps_tooltip)
+        self.widget.max_train_selector.setToolTip(resume_steps_tooltip)
+        self.widget.max_train_input.setToolTip(resume_steps_tooltip)
 
     def setup_connections(self) -> None:
         self.widget.base_model_input.textChanged.connect(
